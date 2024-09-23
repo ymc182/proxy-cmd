@@ -115,6 +115,9 @@ type carResponse struct {
 func writeJSONError(w http.ResponseWriter, code int, err error) {
 	reply := Response{}
 
+	//log the error
+	log.Error("Error: %s", err)
+
 	var httpErr *inet.HttpError
 	var jsonBytes []byte
 	if errors.As(err, &httpErr) {

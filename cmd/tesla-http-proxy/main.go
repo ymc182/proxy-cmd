@@ -46,6 +46,7 @@ type HttpProxyConfig struct {
 
 var (
 	httpConfig = &HttpProxyConfig{}
+	apiKey     string
 )
 
 func init() {
@@ -55,6 +56,7 @@ func init() {
 	flag.StringVar(&httpConfig.host, "host", "localhost", "Proxy server `hostname`")
 	flag.IntVar(&httpConfig.port, "port", defaultPort, "`Port` to listen on")
 	flag.DurationVar(&httpConfig.timeout, "timeout", proxy.DefaultTimeout, "Timeout interval when sending commands")
+	flag.StringVar(&apiKey, "api-key", "", "API key for authentication")
 }
 
 func Usage() {
@@ -118,15 +120,34 @@ func main() {
 		return
 	}
 	p.Timeout = httpConfig.timeout
+
+	
+	handler := apiKeyMiddleware(p)
+
 	addr := fmt.Sprintf("%s:%d", httpConfig.host, httpConfig.port)
 	log.Info("Listening on %s", addr)
 
-	// To add more application logic requests, such as alternative client authentication, create
-	// a http.HandleFunc implementation (https://pkg.go.dev/net/http#HandlerFunc). The ServeHTTP
-	// method of your implementation can perform your business logic and then, if the request is
-	// authorized, invoke p.ServeHTTP. Finally, replace p in the below ListenAndServeTLS call with
-	// an object of your newly created type.
-	log.Error("Server stopped: %s", http.ListenAndServeTLS(addr, httpConfig.certFilename, httpConfig.keyFilename, p))
+	log.Error("Server stopped: %s", http.ListenAndServeTLS(addr, httpConfig.certFilename, httpConfig.keyFilename, handler))
+}
+
+func apiKeyMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check for API key in the request header
+		providedKey := r.Header.Get("X-API-Key")
+		if providedKey == "" {
+			http.Error(w, "Missing API key", http.StatusUnauthorized)
+			return
+		}
+
+		// Validate the API key
+		if providedKey != apiKey {
+			http.Error(w, "Invalid API key", http.StatusUnauthorized)
+			return
+		}
+
+		// If the API key is valid, call the next handler
+		next.ServeHTTP(w, r)
+	})
 }
 
 // readConfig applies configuration from environment variables.
